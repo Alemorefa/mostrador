@@ -1,0 +1,12 @@
+﻿{
+  // Publica el sitio ya compilado (carpeta dist) como archivos estáticos.
+  // No hay código de servidor: todo el trabajo lo hace Supabase.
+  "name": "mostrador",
+  "compatibility_date": "2026-09-10",
+  "assets": {
+    "directory": "./dist/",
+    // La app es de una sola página: cualquier ruta que no sea un archivo
+    // devuelve index.html y React se encarga del resto.
+    "not_found_handling": "single-page-application"
+  }
+}
