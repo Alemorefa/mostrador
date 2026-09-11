@@ -604,6 +604,15 @@ function CodigosAsociados({ extras, setExtras, mostrar }) {
   const [nuevo, setNuevo] = useState('')
   const caja = useRef(null)
 
+  // Al editar un producto, los códigos que ya tiene llegan de la base un
+  // instante DESPUÉS de que se dibuja el formulario. El valor inicial del tilde
+  // se calcula una sola vez, en ese primer dibujo, cuando la lista todavía está
+  // vacía: sin esto el tilde quedaba apagado para siempre y los códigos que el
+  // producto ya tenía no se veían nunca.
+  useEffect(() => {
+    if (extras.length > 0) setAbierto(true)
+  }, [extras.length])
+
   useEffect(() => {
     if (abierto) setTimeout(() => caja.current?.focus(), 40)
   }, [abierto])
@@ -650,7 +659,7 @@ function CodigosAsociados({ extras, setExtras, mostrar }) {
                    }} />
             <span className="ayuda">
               {extras.length
-                ? `${extras.length} código${extras.length === 1 ? '' : 's'} sumado${extras.length === 1 ? '' : 's'}. Podés seguir escaneando.`
+                ? `${extras.length} código${extras.length === 1 ? '' : 's'} asociado${extras.length === 1 ? '' : 's'}. Podés seguir escaneando.`
                 : 'Cada lectura se suma a la lista.'}
             </span>
           </div>
@@ -846,8 +855,8 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
   useEffect(() => {
     datos.codigosDe(producto.id)
       .then((cs) => { setExtras(cs); setExtrasOriginales(cs) })
-      .catch(() => {})
-  }, [producto.id])
+      .catch((e) => mostrar('error', 'No pude leer los códigos asociados: ' + e.message))
+  }, [producto.id, mostrar])
   const primerCampo = useRef(null)
   // Se guarda al abrir el editor. Leerlo después de guardar da el valor nuevo.
   const [precioOriginal] = useState(Number(producto.precio_venta ?? 0))
