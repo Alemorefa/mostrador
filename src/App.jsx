@@ -7,8 +7,20 @@ const plata = (n) =>
 const pct = (n) =>
   Number(n).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const esCodigo = (t) => /^\d{6,}$/.test(t.trim())
-const margen = (costo, venta) =>
-  !venta || venta <= 0 ? null : Math.round(((venta - costo) / venta) * 1000) / 10
+/**
+ * Margen sobre el precio de venta. Devuelve null cuando no se puede calcular,
+ * y quien lo muestra pone un guión.
+ *
+ * Sin costo NO hay margen. Antes, con el costo en cero, la cuenta daba 100 %:
+ * matemáticamente cierto y comercialmente mentira. Un costo vacío significa
+ * "no sé cuánto me salió", no "es todo ganancia".
+ */
+const margen = (costo, venta) => {
+  const c = Number(costo), v = Number(venta)
+  if (!Number.isFinite(c) || c <= 0) return null
+  if (!Number.isFinite(v) || v <= 0) return null
+  return Math.round(((v - c) / v) * 1000) / 10
+}
 
 /** Al revés: si fijás el margen, sale el precio de venta. */
 const ventaDesdeMargen = (costo, margenPct) => {
@@ -381,14 +393,19 @@ function Cargar({ mostrar, alGuardar }) {
     else setTimeout(() => primerCampo.current?.focus(), 40)
   }, [paso])
 
+  // Devuelve el producto repetido, o null si el código está libre. Devolverlo
+  // importa: quien la llama necesita la respuesta ya, y el estado de React
+  // recién se actualiza en el dibujado siguiente.
   const revisarCodigo = useCallback(async (codigo) => {
     const c = codigo.trim()
-    if (!c) { setYaExiste(null); return }
+    if (!c) { setYaExiste(null); return null }
     setBuscando(true)
     try {
       const encontrados = await datos.buscar(c, true)
-      setYaExiste(encontrados.find((p) => String(p.ean ?? '') === c) ?? null)
-    } catch { setYaExiste(null) }
+      const repetido = encontrados.find((p) => String(p.ean ?? '') === c) ?? null
+      setYaExiste(repetido)
+      return repetido
+    } catch { setYaExiste(null); return null }
     finally { setBuscando(false) }
   }, [])
 
@@ -420,7 +437,13 @@ function Cargar({ mostrar, alGuardar }) {
                    if (e.key !== 'Enter') return
                    e.preventDefault()
                    clearTimeout(demora.current)
-                   revisarCodigo(f.ean).then(() => { if (f.ean.trim()) seguir() })
+                   // El lector termina cada lectura con un Enter. Antes ese Enter
+                   // pasaba de largo al paso siguiente sin mirar el resultado, así
+                   // que escaneando NUNCA se veía el aviso de código repetido.
+                   // Ahora esperamos la respuesta y solo seguimos si está libre.
+                   revisarCodigo(f.ean).then((repetido) => {
+                     if (!repetido && f.ean.trim()) seguir()
+                   })
                  }} />
           <span className="ayuda">{buscando ? 'Fijándome si ya está…' : 'El lector escribe acá solo.'}</span>
         </div>
