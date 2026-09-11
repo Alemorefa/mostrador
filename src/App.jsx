@@ -214,7 +214,12 @@ function Mostrador({ esDueno, mostrar }) {
         // Se limpia la casilla haya o no resultado: si el código fallido se
         // queda, la próxima lectura se le pega atrás.
         setTexto(''); foco()
-        const exacto = encontrados.find((p) => p.ean === t)
+        // El código escaneado puede ser el principal del producto o uno de sus
+        // asociados (los sabores de la Manaos). Comparar solo contra p.ean
+        // dejaba afuera a los asociados: la búsqueda los encontraba y acá se
+        // descartaban, así que el mostrador decía "no está cargado".
+        const exacto = encontrados.find((p) => String(p.ean ?? '') === t)
+                    ?? (encontrados.length === 1 ? encontrados[0] : null)
         if (exacto) {
           setElegido(exacto); setResultados([]); setCodigoFallido('')
           setDestello((n) => n + 1)
@@ -402,7 +407,11 @@ function Cargar({ mostrar, alGuardar }) {
     setBuscando(true)
     try {
       const encontrados = await datos.buscar(c, true)
-      const repetido = encontrados.find((p) => String(p.ean ?? '') === c) ?? null
+      // Mismo criterio que el mostrador: el código puede estar como principal
+      // o como asociado. Si la búsqueda por un código exacto trajo un solo
+      // producto, ese código ya es de alguien.
+      const repetido = encontrados.find((p) => String(p.ean ?? '') === c)
+                    ?? (encontrados.length === 1 ? encontrados[0] : null)
       setYaExiste(repetido)
       return repetido
     } catch { setYaExiste(null); return null }
@@ -476,6 +485,9 @@ function Cargar({ mostrar, alGuardar }) {
 function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
   const [ocupado, setOcupado] = useState(false)
   const [margenTexto, setMargenTexto] = useState('')
+  // Los códigos adicionales se juntan acá y se guardan después de crear el
+  // producto: antes de eso todavía no hay id al que asociarlos.
+  const [extras, setExtras] = useState([])
 
   const costo = aNum(f.costo), venta = aNum(f.venta)
 
@@ -507,12 +519,26 @@ function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
     }
     setOcupado(true)
     try {
-      await datos.crearProducto({
+      const creado = await datos.crearProducto({
         nombre: f.nombre.trim(), marca: f.marca.trim(), presentacion: f.presentacion.trim(),
         ean: f.ean.trim(), rubro: f.rubro, proveedor: f.proveedor.trim(),
         precio_costo: costo, precio_venta: venta,
       })
-      mostrar('ok', `"${f.nombre.trim()}" quedó cargado.`)
+
+      // Si alguno de los códigos adicionales ya es de otro producto, la base lo
+      // rechaza. El producto igual quedó bien cargado, así que no se deshace
+      // nada: se avisa cuáles no entraron y listo.
+      const rechazados = []
+      for (const c of extras) {
+        try { await datos.agregarCodigo(creado.id, c) } catch { rechazados.push(c) }
+      }
+
+      mostrar(rechazados.length ? 'error' : 'ok',
+        rechazados.length
+          ? `"${f.nombre.trim()}" quedó cargado, pero ${rechazados.join(', ')} ya ${rechazados.length === 1 ? 'estaba asociado' : 'estaban asociados'} a otro producto.`
+          : extras.length
+            ? `"${f.nombre.trim()}" quedó cargado con ${extras.length + 1} códigos.`
+            : `"${f.nombre.trim()}" quedó cargado.`)
       volver()
     } catch (err) { mostrar('error', err.message) }
     finally { setOcupado(false) }
@@ -527,7 +553,8 @@ function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
       </p>
 
       <CamposProducto f={f} setF={setF} cambiar={cambiar} primerCampo={primerCampo}
-                      margenTexto={margenTexto} cambiarMargen={cambiarMargen} costo={costo} venta={venta} />
+                      margenTexto={margenTexto} cambiarMargen={cambiarMargen} costo={costo} venta={venta}
+                      extras={extras} setExtras={setExtras} mostrar={mostrar} />
 
       <div className="acciones">
         <button className="pri" type="submit" disabled={ocupado}>
@@ -540,7 +567,95 @@ function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
 }
 
 /** Los campos son los mismos al cargar y al editar: van en un solo lugar. */
-function CamposProducto({ f, cambiar, primerCampo, margenTexto, cambiarMargen, costo, venta, conCodigo }) {
+
+/**
+ * Códigos de barras adicionales para un mismo producto.
+ *
+ * El caso real: la gaseosa Manaos trae un código distinto por sabor, pero es
+ * un solo producto con un solo precio. Se escanea cualquiera y sale la misma
+ * ficha.
+ *
+ * El campo queda con el foco puesto para que el lector dispare de una: cada
+ * lectura termina en Enter, el código se suma a la lista y la casilla se vacía
+ * esperando la siguiente. Se pueden encadenar sin tocar el teclado.
+ */
+function CodigosAsociados({ extras, setExtras, mostrar }) {
+  const [abierto, setAbierto] = useState(extras.length > 0)
+  const [nuevo, setNuevo] = useState('')
+  const caja = useRef(null)
+
+  useEffect(() => {
+    if (abierto) setTimeout(() => caja.current?.focus(), 40)
+  }, [abierto])
+
+  const agregar = (valor) => {
+    const c = String(valor).trim()
+    if (!c) return
+    if (extras.includes(c)) {
+      mostrar('error', `El código ${c} ya está en la lista.`)
+      setNuevo(''); return
+    }
+    setExtras([...extras, c])
+    setNuevo('')
+    caja.current?.focus()
+  }
+
+  return (
+    <div className="codigos">
+      <label className="tilde">
+        <input type="checkbox" checked={abierto}
+               onChange={(e) => {
+                 setAbierto(e.target.checked)
+                 if (!e.target.checked) setExtras([])
+               }} />
+        <span>Este producto tiene más de un código de barras</span>
+      </label>
+      <span className="ayuda">
+        Para los que vienen en varios sabores o colores con el mismo precio.
+      </span>
+
+      {abierto && (
+        <>
+          <div className="campo" style={{ marginTop: 12 }}>
+            <label htmlFor="c-extra">Escaneá el siguiente</label>
+            <input id="c-extra" ref={caja} inputMode="numeric" value={nuevo}
+                   autoComplete="off" className="codigo-grande"
+                   placeholder="Escaneá o escribí y Enter"
+                   onChange={(e) => setNuevo(e.target.value)}
+                   onKeyDown={(e) => {
+                     if (e.key !== 'Enter') return
+                     // Sin esto el Enter del lector manda el formulario entero.
+                     e.preventDefault()
+                     agregar(nuevo)
+                   }} />
+            <span className="ayuda">
+              {extras.length
+                ? `${extras.length} código${extras.length === 1 ? '' : 's'} sumado${extras.length === 1 ? '' : 's'}. Podés seguir escaneando.`
+                : 'Cada lectura se suma a la lista.'}
+            </span>
+          </div>
+
+          {extras.length > 0 && (
+            <ul className="lista-codigos">
+              {extras.map((c) => (
+                <li key={c}>
+                  <span className="mono">{c}</span>
+                  <button type="button" className="como-enlace"
+                          onClick={() => setExtras(extras.filter((x) => x !== c))}>
+                    quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function CamposProducto({ f, cambiar, primerCampo, margenTexto, cambiarMargen, costo, venta, conCodigo,
+                         extras, setExtras, mostrar }) {
   const m = margen(costo, venta)
   return (
     <>
@@ -595,6 +710,10 @@ function CamposProducto({ f, cambiar, primerCampo, margenTexto, cambiarMargen, c
           <span className="ayuda">Sirve para subir después todos sus precios de una vez.</span>
         </div>
       </div>
+
+      {extras && (
+        <CodigosAsociados extras={extras} setExtras={setExtras} mostrar={mostrar} />
+      )}
 
       <div className="margen">
         <span>Margen sobre la venta:</span>
@@ -699,6 +818,16 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
   })
   const [ocupado, setOcupado] = useState(false)
   const [confirmarBaja, setConfirmarBaja] = useState(false)
+  // Los códigos que ya tiene, y una copia de cómo estaban al abrir, para saber
+  // al guardar cuáles se sumaron y cuáles se quitaron.
+  const [extras, setExtras] = useState([])
+  const [extrasOriginales, setExtrasOriginales] = useState([])
+
+  useEffect(() => {
+    datos.codigosDe(producto.id)
+      .then((cs) => { setExtras(cs); setExtrasOriginales(cs) })
+      .catch(() => {})
+  }, [producto.id])
   const primerCampo = useRef(null)
   // Se guarda al abrir el editor. Leerlo después de guardar da el valor nuevo.
   const [precioOriginal] = useState(Number(producto.precio_venta ?? 0))
@@ -740,6 +869,15 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
         precio_costo: costo,
         precio_venta: venta,
       })
+
+      for (const c of extras.filter((c) => !extrasOriginales.includes(c))) {
+        await datos.agregarCodigo(producto.id, c)
+      }
+      for (const c of extrasOriginales.filter((c) => !extras.includes(c))) {
+        await datos.quitarCodigo(c)
+      }
+      setExtrasOriginales(extras)
+
       const cambioPrecio = venta !== precioOriginal
       mostrar('ok', cambioPrecio
         ? `"${f.nombre.trim()}" pasó a $${plata(venta)}.`
@@ -776,7 +914,8 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
 
       <CamposProducto f={f} setF={setF} cambiar={cambiar} primerCampo={primerCampo}
                       margenTexto={margenTexto} cambiarMargen={cambiarMargen}
-                      costo={costo} venta={venta} conCodigo />
+                      costo={costo} venta={venta} conCodigo
+                      extras={extras} setExtras={setExtras} mostrar={mostrar} />
 
       <div className="acciones">
         <button className="pri" type="submit" disabled={ocupado}>
