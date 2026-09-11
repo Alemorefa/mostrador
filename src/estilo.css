@@ -155,10 +155,10 @@ button.como-texto:hover{color:var(--acento); border-bottom-color:var(--acento)}
 .campo input[inputmode="decimal"], .campo input[inputmode="numeric"]{
   font-family:var(--display); font-variant-numeric:tabular-nums; font-weight:600}
 .campo .ayuda{font-size:13px; color:var(--tinta3)}
-.margen{margin-top:16px; padding:14px 16px; border-radius:8px; background:var(--acento-suave);
+.resumen-precio{margin-top:16px; padding:14px 16px; border-radius:8px; background:var(--acento-suave);
   border:1px solid var(--acento-borde); display:flex; gap:8px; align-items:baseline;
   flex-wrap:wrap; font-size:15px; color:var(--tinta2)}
-.margen b{font-family:var(--display); font-size:24px; color:var(--tinta); font-variant-numeric:tabular-nums}
+.resumen-precio b{font-family:var(--display); font-size:24px; color:var(--tinta); font-variant-numeric:tabular-nums}
 .acciones{display:flex; gap:10px; margin-top:20px; flex-wrap:wrap}
 
 table{width:100%; border-collapse:collapse; font-size:15px}

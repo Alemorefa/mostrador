@@ -8,25 +8,46 @@ const pct = (n) =>
   Number(n).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const esCodigo = (t) => /^\d{6,}$/.test(t.trim())
 /**
- * Margen sobre el precio de venta. Devuelve null cuando no se puede calcular,
- * y quien lo muestra pone un guión.
+ * EL PORCENTAJE QUE SE USA EN EL MOSTRADOR: cuánto se le suma al costo.
  *
- * Sin costo NO hay margen. Antes, con el costo en cero, la cuenta daba 100 %:
- * matemáticamente cierto y comercialmente mentira. Un costo vacío significa
- * "no sé cuánto me salió", no "es todo ganancia".
+ *     1000 + 30 %  →  1300
+ *     recargo = (venta − costo) / COSTO × 100
+ *
+ * Es la cuenta que hacemos nosotros al poner un precio, y es distinta del
+ * margen contable de más abajo. Mismo producto, dos números: 1000 → 1300 es
+ * 30 % sobre el costo y 23,1 % sobre la venta. Confundirlos hace que un
+ * producto se venda más caro o más barato de lo que uno creía.
+ *
+ * Sin costo NO hay porcentaje. Con el costo en cero la cuenta se va al
+ * infinito: un costo vacío significa "no sé cuánto me salió", no "es gratis".
+ */
+const recargo = (costo, venta) => {
+  const c = Number(costo), v = Number(venta)
+  if (!Number.isFinite(c) || c <= 0) return null
+  if (!Number.isFinite(v) || v <= 0) return null
+  return Math.round(((v - c) / c) * 1000) / 10
+}
+
+/** Al revés: si fijás el recargo, sale el precio de venta. */
+const ventaDesdeRecargo = (costo, recargoPct) => {
+  const c = Number(costo), r = Number(recargoPct)
+  if (!Number.isFinite(c) || c <= 0) return null
+  if (!Number.isFinite(r) || r <= -100) return null
+  return Math.round(c * (1 + r / 100) * 100) / 100
+}
+
+/**
+ * El margen contable: qué parte del precio de venta es ganancia.
+ *
+ *     margen = (venta − costo) / VENTA × 100
+ *
+ * No se escribe en ningún lado, se muestra al lado del recargo como dato.
  */
 const margen = (costo, venta) => {
   const c = Number(costo), v = Number(venta)
   if (!Number.isFinite(c) || c <= 0) return null
   if (!Number.isFinite(v) || v <= 0) return null
   return Math.round(((v - c) / v) * 1000) / 10
-}
-
-/** Al revés: si fijás el margen, sale el precio de venta. */
-const ventaDesdeMargen = (costo, margenPct) => {
-  const m = Number(margenPct)
-  if (!Number.isFinite(m) || m >= 100) return null
-  return Math.round((Number(costo) / (1 - m / 100)) * 100) / 100
 }
 
 const aNum = (v) => {
@@ -347,7 +368,7 @@ function Ficha({ p, esDueno, destello }) {
   const [verCosto, setVerCosto] = useState(false)
   const dias = diasDesde(p.precio_actualizado_en)
   const viejo = dias !== null && dias > 21
-  const m = esDueno ? margen(p.precio_costo, p.precio_venta) : null
+  const r = esDueno ? recargo(p.precio_costo, p.precio_venta) : null
 
   return (
     <article className="ficha">
@@ -386,7 +407,7 @@ function Ficha({ p, esDueno, destello }) {
         <div className="costos visible">
           <div><span className="etiq">Costo</span><b>${plata(p.precio_costo)}</b></div>
           <div><span className="etiq">Ganancia</span><b>${plata(p.precio_venta - p.precio_costo)}</b></div>
-          <div><span className="etiq">Margen</span><b>{m === null ? '—' : pct(m) + ' %'}</b></div>
+          <div><span className="etiq">% s/ costo</span><b>{r === null ? '—' : pct(r) + ' %'}</b></div>
           <div><span className="etiq">Proveedor</span><b style={{ fontSize: 19 }}>{p.proveedor || '—'}</b></div>
         </div>
       )}
@@ -503,7 +524,7 @@ function Cargar({ mostrar, alGuardar }) {
 
 function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
   const [ocupado, setOcupado] = useState(false)
-  const [margenTexto, setMargenTexto] = useState('')
+  const [recargoTexto, setRecargoTexto] = useState('')
   // Los códigos adicionales se juntan acá y se guardan después de crear el
   // producto: antes de eso todavía no hay id al que asociarlos.
   const [extras, setExtras] = useState([])
@@ -516,16 +537,16 @@ function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
     if (campo === 'costo' || campo === 'venta') {
       const c = campo === 'costo' ? aNum(v) : costo
       const p = campo === 'venta' ? aNum(v) : venta
-      const m = margen(c, p)
-      setMargenTexto(m === null ? '' : String(m).replace('.', ','))
+      const r = recargo(c, p)
+      setRecargoTexto(r === null ? '' : String(r).replace('.', ','))
     }
   }
 
-  // Escribir el margen fija el precio de venta a partir del costo.
-  const cambiarMargen = (e) => {
+  // Escribir el porcentaje fija el precio de venta a partir del costo.
+  const cambiarRecargo = (e) => {
     const v = e.target.value
-    setMargenTexto(v)
-    const nueva = ventaDesdeMargen(costo, aNum(v))
+    setRecargoTexto(v)
+    const nueva = ventaDesdeRecargo(costo, aNum(v))
     if (nueva !== null && costo > 0) {
       setF((x) => ({ ...x, venta: String(nueva).replace('.', ',') }))
     }
@@ -573,7 +594,7 @@ function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
       </p>
 
       <CamposProducto f={f} setF={setF} cambiar={cambiar} primerCampo={primerCampo}
-                      margenTexto={margenTexto} cambiarMargen={cambiarMargen} costo={costo} venta={venta}
+                      recargoTexto={recargoTexto} cambiarRecargo={cambiarRecargo} costo={costo} venta={venta}
                       extras={extras} setExtras={setExtras} mostrar={mostrar} />
 
       <div className="acciones">
@@ -683,8 +704,9 @@ function CodigosAsociados({ extras, setExtras, mostrar }) {
   )
 }
 
-function CamposProducto({ f, cambiar, primerCampo, margenTexto, cambiarMargen, costo, venta, conCodigo,
+function CamposProducto({ f, cambiar, primerCampo, recargoTexto, cambiarRecargo, costo, venta, conCodigo,
                          extras, setExtras, mostrar }) {
+  const r = recargo(costo, venta)
   const m = margen(costo, venta)
   return (
     <>
@@ -716,10 +738,12 @@ function CamposProducto({ f, cambiar, primerCampo, margenTexto, cambiarMargen, c
           <input id="c-costo" inputMode="decimal" value={f.costo} onChange={cambiar('costo')} placeholder="0,00" />
         </div>
         <div className="campo">
-          <label htmlFor="c-margen">Margen %</label>
-          <input id="c-margen" inputMode="decimal" value={margenTexto} onChange={cambiarMargen}
+          <label htmlFor="c-recargo">% sobre el costo</label>
+          <input id="c-recargo" inputMode="decimal" value={recargoTexto} onChange={cambiarRecargo}
                  placeholder="0,0" disabled={!costo} />
-          <span className="ayuda">{costo ? 'Escribilo y sale el precio de venta.' : 'Cargá primero el costo.'}</span>
+          <span className="ayuda">
+            {costo ? 'Escribí 30 y el precio queda 30 % arriba del costo.' : 'Cargá primero el costo.'}
+          </span>
         </div>
         <div className="campo">
           <label htmlFor="c-venta">Precio venta *</label>
@@ -744,12 +768,19 @@ function CamposProducto({ f, cambiar, primerCampo, margenTexto, cambiarMargen, c
         <CodigosAsociados extras={extras} setExtras={setExtras} mostrar={mostrar} />
       )}
 
-      <div className="margen">
-        <span>Margen sobre la venta:</span>
-        <b>{m === null ? '—' : pct(m) + ' %'}</b>
+      <div className="resumen-precio">
+        <span>Le estás sacando:</span>
+        <b>{r === null ? '—' : pct(r) + ' %'}</b>
         <span style={{ color: 'var(--tinta3)' }}>
-          {m === null ? 'se calcula solo con el costo y la venta' : `ganás $${plata(venta - costo)} por unidad`}
+          {r === null
+            ? 'se calcula solo con el costo y la venta'
+            : `sobre el costo · ganás $${plata(venta - costo)} por unidad`}
         </span>
+        {m !== null && (
+          <span className="ayuda" style={{ flexBasis: '100%' }}>
+            Mirado sobre el precio de venta, es el {pct(m)} % (el margen contable).
+          </span>
+        )}
       </div>
     </>
   )
@@ -799,18 +830,18 @@ function Listado({ mostrar }) {
         <table>
           <thead>
             <tr><th>Producto</th>
-                <th className="num">Costo</th><th className="num">Venta</th><th className="num">Margen</th></tr>
+                <th className="num">Costo</th><th className="num">Venta</th><th className="num">% s/ costo</th></tr>
           </thead>
           <tbody>
             {visibles.map((p) => {
-              const m = margen(p.precio_costo, p.precio_venta)
+              const r = recargo(p.precio_costo, p.precio_venta)
               return (
                 <tr key={p.id} className="fila-clic" onClick={() => setEditando(p)}>
                   <td className="nom">{p.nombre} {p.presentacion ?? ''}
                     <div className="tenue">{[p.marca, p.ean].filter(Boolean).join(' · ') || '—'}</div></td>
                   <td className="num tenue">{plata(p.precio_costo)}</td>
                   <td className="num">{plata(p.precio_venta)}</td>
-                  <td className="num">{m === null ? '—' : pct(m) + '%'}</td>
+                  <td className="num">{r === null ? '—' : pct(r) + '%'}</td>
                 </tr>
               )
             })}
@@ -841,9 +872,9 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
     costo: coma(producto.precio_costo),
     venta: coma(producto.precio_venta),
   })
-  const [margenTexto, setMargenTexto] = useState(() => {
-    const m = margen(producto.precio_costo, producto.precio_venta)
-    return m === null ? '' : String(m).replace('.', ',')
+  const [recargoTexto, setRecargoTexto] = useState(() => {
+    const r = recargo(producto.precio_costo, producto.precio_venta)
+    return r === null ? '' : String(r).replace('.', ',')
   })
   const [ocupado, setOcupado] = useState(false)
   const [confirmarBaja, setConfirmarBaja] = useState(false)
@@ -869,15 +900,15 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
     if (campo === 'costo' || campo === 'venta') {
       const c = campo === 'costo' ? aNum(v) : costo
       const p = campo === 'venta' ? aNum(v) : venta
-      const m = margen(c, p)
-      setMargenTexto(m === null ? '' : String(m).replace('.', ','))
+      const r = recargo(c, p)
+      setRecargoTexto(r === null ? '' : String(r).replace('.', ','))
     }
   }
 
-  const cambiarMargen = (e) => {
+  const cambiarRecargo = (e) => {
     const v = e.target.value
-    setMargenTexto(v)
-    const nueva = ventaDesdeMargen(costo, aNum(v))
+    setRecargoTexto(v)
+    const nueva = ventaDesdeRecargo(costo, aNum(v))
     if (nueva !== null && costo > 0) setF((x) => ({ ...x, venta: coma(nueva) }))
   }
 
@@ -952,7 +983,7 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
       </p>
 
       <CamposProducto f={f} setF={setF} cambiar={cambiar} primerCampo={primerCampo}
-                      margenTexto={margenTexto} cambiarMargen={cambiarMargen}
+                      recargoTexto={recargoTexto} cambiarRecargo={cambiarRecargo}
                       costo={costo} venta={venta} conCodigo
                       extras={extras} setExtras={setExtras} mostrar={mostrar} />
 
