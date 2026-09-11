@@ -35,6 +35,15 @@ const aNum = (v) => {
   return Number.isNaN(n) ? 0 : n
 }
 
+// Cuando un código adicional no entra, lo importante no es que falló: es por
+// qué y qué hacer. La base ya devuelve esa frase — la mostramos tal cual en
+// vez de reemplazarla por un "hubo un error" que no le sirve a nadie.
+const explicarRechazos = (rechazados) =>
+  rechazados.length === 1
+    ? rechazados[0].motivo
+    : 'Estos códigos no entraron:\n' +
+      rechazados.map((r) => `• ${r.motivo}`).join('\n')
+
 function diasDesde(iso) {
   if (!iso) return null
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
@@ -49,10 +58,16 @@ export default function App() {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [aviso, setAviso] = useState(null)
 
+  // Un solo temporizador vivo: si llegan dos avisos seguidos, el segundo no se
+  // tiene que ir con el reloj del primero. Los errores duran más porque hay que
+  // leerlos; los "listo" se van solos enseguida.
+  const reloj = useRef(null)
   const mostrar = useCallback((tipo, texto) => {
+    clearTimeout(reloj.current)
     setAviso({ tipo, texto })
-    setTimeout(() => setAviso(null), 5000)
+    reloj.current = setTimeout(() => setAviso(null), tipo === 'error' ? 9000 : 4000)
   }, [])
+  useEffect(() => () => clearTimeout(reloj.current), [])
 
   const cargarPerfil = useCallback(async () => {
     try {
@@ -127,7 +142,11 @@ export default function App() {
       </div>
 
       <div className="env">
-        {aviso && <div className={'aviso ' + aviso.tipo}>{aviso.texto}</div>}
+        {aviso && (
+          <div className={'aviso ' + aviso.tipo} role="alert" onClick={() => setAviso(null)}>
+            {aviso.texto}
+          </div>
+        )}
         {actual === 'mostrador' && <Mostrador esDueno={esDueno} mostrar={mostrar} />}
         {actual === 'cargar'    && <Cargar mostrar={mostrar} alGuardar={() => setVista('mostrador')} />}
         {actual === 'listado'   && <Listado mostrar={mostrar} />}
@@ -530,12 +549,13 @@ function Formulario({ f, setF, primerCampo, mostrar, volver, alGuardar }) {
       // nada: se avisa cuáles no entraron y listo.
       const rechazados = []
       for (const c of extras) {
-        try { await datos.agregarCodigo(creado.id, c) } catch { rechazados.push(c) }
+        try { await datos.agregarCodigo(creado.id, c) }
+        catch (e) { rechazados.push({ codigo: c, motivo: e.message }) }
       }
 
       mostrar(rechazados.length ? 'error' : 'ok',
         rechazados.length
-          ? `"${f.nombre.trim()}" quedó cargado, pero ${rechazados.join(', ')} ya ${rechazados.length === 1 ? 'estaba asociado' : 'estaban asociados'} a otro producto.`
+          ? `"${f.nombre.trim()}" quedó cargado. ` + explicarRechazos(rechazados)
           : extras.length
             ? `"${f.nombre.trim()}" quedó cargado con ${extras.length + 1} códigos.`
             : `"${f.nombre.trim()}" quedó cargado.`)
@@ -870,19 +890,29 @@ function Editor({ producto, mostrar, volver, alGuardar }) {
         precio_venta: venta,
       })
 
+      // Un código que la base rechaza no puede tirar abajo el resto del guardado:
+      // se aplica todo lo que entra, se sacan de la lista los que no entraron y
+      // se avisa por qué. Lo que queda en pantalla es lo que quedó guardado.
+      const rechazados = []
       for (const c of extras.filter((c) => !extrasOriginales.includes(c))) {
-        await datos.agregarCodigo(producto.id, c)
+        try { await datos.agregarCodigo(producto.id, c) }
+        catch (e) { rechazados.push({ codigo: c, motivo: e.message }) }
       }
       for (const c of extrasOriginales.filter((c) => !extras.includes(c))) {
         await datos.quitarCodigo(c)
       }
-      setExtrasOriginales(extras)
+      const guardados = extras.filter((c) => !rechazados.some((r) => r.codigo === c))
+      setExtras(guardados)
+      setExtrasOriginales(guardados)
 
       const cambioPrecio = venta !== precioOriginal
-      mostrar('ok', cambioPrecio
-        ? `"${f.nombre.trim()}" pasó a $${plata(venta)}.`
-        : `"${f.nombre.trim()}" quedó actualizado.`)
-      await alGuardar()
+      mostrar(rechazados.length ? 'error' : 'ok',
+        rechazados.length
+          ? `"${f.nombre.trim()}" quedó actualizado. ` + explicarRechazos(rechazados)
+          : cambioPrecio
+            ? `"${f.nombre.trim()}" pasó a $${plata(venta)}.`
+            : `"${f.nombre.trim()}" quedó actualizado.`)
+      if (!rechazados.length) await alGuardar()
     } catch (err) { mostrar('error', err.message) }
     finally { setOcupado(false) }
   }

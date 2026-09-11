@@ -64,9 +64,18 @@ button.como-texto:hover{color:var(--acento); border-bottom-color:var(--acento)}
 .menu-lista button:hover{background:var(--acento-suave); color:var(--acento)}
 .menu-lista hr{border:none; border-top:1px solid var(--borde); margin:5px 2px; width:100%}
 
-.aviso{padding:12px 16px; border-radius:var(--r); margin:16px 0 0; font-size:15px;
-  background:var(--verde-suave); color:var(--verde); border:1px solid currentColor}
+/* El aviso flota sobre la pantalla en vez de vivir arriba de todo: cuando el
+   formulario es largo, el botón de guardar queda abajo y un mensaje puesto
+   arriba se muestra fuera de la vista. Un error que nadie ve no sirve de nada.
+   Se puede tocar para cerrarlo antes de tiempo. */
+.aviso{position:fixed; left:14px; right:14px; bottom:16px; z-index:60;
+  max-width:620px; margin:0 auto; cursor:pointer;
+  padding:14px 16px; border-radius:var(--r); font-size:15.5px; line-height:1.45;
+  background:var(--verde-suave); color:var(--verde); border:1px solid currentColor;
+  box-shadow:0 12px 34px rgba(0,0,0,.30); animation:aviso-entra .18s ease-out}
 .aviso.error{background:var(--rojo-suave); color:var(--rojo); white-space:pre-wrap}
+@keyframes aviso-entra{from{opacity:0; transform:translateY(12px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){.aviso{animation:none}}
 
 /* buscador */
 .buscador{padding-top:20px}

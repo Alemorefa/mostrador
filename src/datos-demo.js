@@ -104,7 +104,8 @@ export async function listarTodos() {
 
 export async function crearProducto(p) {
   await espera()
-  if (p.ean && PRODUCTOS.some((x) => x.ean === p.ean)) {
+  // Igual que en la base: un producto sacado de la lista no reserva su código.
+  if (p.ean && PRODUCTOS.some((x) => x.activo && x.ean === p.ean)) {
     throw new Error('Ya hay un producto cargado con ese código de barras.')
   }
   const nuevo = {
@@ -178,9 +179,9 @@ export async function agregarCodigo(productoId, ean) {
   await espera(120)
   const e = String(ean).trim()
   if (CODIGOS.some((c) => c.ean === e)) throw new Error(`El código ${e} ya está asociado a otro producto.`)
-  if (PRODUCTOS.some((p) => String(p.ean ?? '') === e)) {
-    const otro = PRODUCTOS.find((p) => String(p.ean ?? '') === e)
-    throw new Error(`El código ${e} ya es el principal de "${otro.nombre}".`)
+  const otro = PRODUCTOS.find((p) => p.activo && String(p.ean ?? '') === e)
+  if (otro) {
+    throw new Error(`El código ${e} ya es el principal de "${otro.nombre}". Sacá ese producto de la lista si querés asociarlo acá.`)
   }
   CODIGOS.push({ ean: e, producto_id: productoId })
 }
