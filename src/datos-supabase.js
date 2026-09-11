@@ -173,3 +173,25 @@ export async function importarProductos({ nuevos, cambios }) {
 
   return { creados, actualizados }
 }
+
+// ── códigos de barras adicionales ───────────────────────────────────────────
+// Una Manaos tiene un código por sabor, pero es un solo producto con un solo
+// precio. El principal vive en productos.ean; estos son los demás.
+
+export async function codigosDe(productoId) {
+  const { data, error } = await supabase
+    .from('codigos_extra').select('ean').eq('producto_id', productoId).order('creado_en')
+  if (error) fallar(error)
+  return (data ?? []).map((c) => c.ean)
+}
+
+export async function agregarCodigo(productoId, ean) {
+  const { error } = await supabase
+    .from('codigos_extra').insert({ producto_id: productoId, ean: String(ean).trim() })
+  if (error) fallar(error)
+}
+
+export async function quitarCodigo(ean) {
+  const { error } = await supabase.from('codigos_extra').delete().eq('ean', String(ean).trim())
+  if (error) fallar(error)
+}

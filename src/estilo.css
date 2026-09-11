@@ -220,3 +220,20 @@ tr.fila-clic{cursor:pointer}
 tr.fila-clic:hover td{background:var(--acento-suave)}
 .dif{margin-left:10px; font-weight:600; font-size:14px}
 .dif.sube{color:var(--ambar)} .dif.baja{color:var(--verde)}
+
+/* códigos de barras adicionales */
+.codigos{
+  margin-top:18px; padding:14px 16px; border-radius:8px;
+  border:1px dashed var(--borde-fuerte); background:var(--papel);
+}
+.tilde{display:flex; align-items:center; gap:10px; cursor:pointer; font-size:15.5px; color:var(--tinta)}
+.tilde input[type="checkbox"]{width:20px; height:20px; accent-color:var(--acento); cursor:pointer; margin:0}
+.codigos > .ayuda{display:block; margin:4px 0 0 30px}
+.lista-codigos{list-style:none; margin:12px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:8px}
+.lista-codigos li{
+  display:flex; align-items:center; gap:10px;
+  background:var(--acento-suave); border:1px solid var(--acento-borde);
+  border-radius:99px; padding:6px 8px 6px 14px; font-size:14.5px;
+}
+.lista-codigos .mono{font-variant-numeric:tabular-nums; color:var(--tinta)}
+.lista-codigos button{font-size:13px; color:var(--acento)}

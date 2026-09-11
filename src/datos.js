@@ -83,3 +83,7 @@ export const historialDePrecios   = (...a) => impl.historialDePrecios(...a)
 export const listarPerfiles       = (...a) => impl.listarPerfiles(...a)
 export const darAcceso            = (...a) => impl.darAcceso(...a)
 export const cambiarAcceso        = (...a) => impl.cambiarAcceso(...a)
+
+export const codigosDe                = (...a) => impl.codigosDe(...a)
+export const agregarCodigo            = (...a) => impl.agregarCodigo(...a)
+export const quitarCodigo             = (...a) => impl.quitarCodigo(...a)

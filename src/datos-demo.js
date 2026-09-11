@@ -41,6 +41,9 @@ const CUENTAS = [
   { email: 'marta@prueba.com', clave: 'despensa', perfil: 'demo-2' },
 ]
 
+// Códigos de barras adicionales: { ean, producto_id }
+let CODIGOS = []
+
 let sesion = null
 
 // ── sesión ──────────────────────────────────────────────────────────────────
@@ -75,9 +78,12 @@ export async function buscar(texto, esDueno) {
   const t = sinTilde(texto.trim())
   if (!t) return []
 
+  const crudo = texto.trim()
   const encontrados = PRODUCTOS.filter((p) => {
     if (!p.activo) return false
-    if (p.ean === texto.trim()) return true
+    if (p.ean === crudo) return true
+    // Los códigos adicionales cuentan igual que el principal, como en la base.
+    if (CODIGOS.some((c) => c.producto_id === p.id && c.ean === crudo)) return true
     const campo = sinTilde([p.nombre, p.marca, p.presentacion, p.rubro].filter(Boolean).join(' '))
     return t.split(/\s+/).every((w) => campo.includes(w))
   })
@@ -159,4 +165,27 @@ export async function importarProductos({ nuevos, cambios }) {
     if (p) Object.assign(p, c.campos, { precio_actualizado_en: new Date().toISOString() })
   })
   return { creados: nuevos.length, actualizados: cambios.length }
+}
+
+// ── códigos de barras adicionales ───────────────────────────────────────────
+
+export async function codigosDe(productoId) {
+  await espera(80)
+  return CODIGOS.filter((c) => c.producto_id === productoId).map((c) => c.ean)
+}
+
+export async function agregarCodigo(productoId, ean) {
+  await espera(120)
+  const e = String(ean).trim()
+  if (CODIGOS.some((c) => c.ean === e)) throw new Error(`El código ${e} ya está asociado a otro producto.`)
+  if (PRODUCTOS.some((p) => String(p.ean ?? '') === e)) {
+    const otro = PRODUCTOS.find((p) => String(p.ean ?? '') === e)
+    throw new Error(`El código ${e} ya es el principal de "${otro.nombre}".`)
+  }
+  CODIGOS.push({ ean: e, producto_id: productoId })
+}
+
+export async function quitarCodigo(ean) {
+  await espera(80)
+  CODIGOS = CODIGOS.filter((c) => c.ean !== String(ean).trim())
 }
